@@ -16,7 +16,7 @@ type GlobalConfig struct {
 // Global is global config, save as ~/.gopack
 var (
 	configPath, _    = homedir.Expand("~/.gopack")
-	defaultWorkspace = "~/gopack-projects"
+	defaultWorkspace = "~/gopack-projects/"
 	Global           = newGlobalConfig()
 )
 
@@ -63,6 +63,9 @@ func configureWorkspace() (string, error) {
 	}
 
 	workspace, _ = homedir.Expand(workspace)
+	if workspace[len(workspace)-1] != '/' {
+		workspace += "/"
+	}
 
 	return workspace, nil
 }

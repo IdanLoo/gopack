@@ -5,4 +5,7 @@ import (
 )
 
 // Router is base router object
-var Router = gin.Default()
+var (
+	Router   = gin.Default()
+	apiGroup = Router.Group("/api")
+)

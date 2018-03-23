@@ -1,101 +1,100 @@
 package project
 
 import (
-	"errors"
+	"io/ioutil"
 	"os"
-	"os/exec"
-	"strings"
+	"time"
 
+	"github.com/IdanLoo/gopack/model"
 	"github.com/IdanLoo/gopack/util/config"
+	"github.com/IdanLoo/gopack/util/git"
 )
 
 // Project is a map to repository
 type Project struct {
-	Proj   string
-	Src    string
-	Bin    string
-	Config string
+	Name   string        `json:"name"`
+	URL    string        `json:"url"`
+	Path   *Path         `json:"path"`
+	Pusher *model.Pusher `json:"pusher"`
 }
 
-type execType int
-
-const (
-	_ execType = iota
-	execBuild
-	execRun
-)
-
-func newProject(name string) *Project {
-	proj := workspace + "/" + name
-
-	return &Project{
-		proj,
-		proj + "/src",
-		proj + "/bin",
-		proj + "/src/gopack.yaml",
-	}
-}
-
-// Of name return a Project Object.
+// New to construct a Project object and make dirs.
 // If project not exist, then create.
-func Of(name string) (*Project, error) {
-	var (
-		proj = newProject(name)
-		err  error
-	)
+func New(name, branch, url string, pusher *model.Pusher) (*Project, error) {
+	proj := newProject(name, url, pusher)
 
-	if !config.IsExist(proj.Proj) {
-		err = proj.createDir()
+	if !config.IsExist(proj.Path.Root) {
+		if err := proj.createDir(); err != nil {
+			return nil, err
+		}
 	}
 
+	if err := proj.clone(branch); err != nil {
+		return nil, err
+	}
+
+	in := newInfo(branch, pusher, time.Now().Unix())
+	if err := in.SaveToDir(proj.Path.Src); err != nil {
+		return nil, err
+	}
+
+	return proj, proj.Build()
+}
+
+// Of to get project of name
+func Of(name string) (*Project, error) {
+	path := workspace + name + "/"
+
+	if !config.IsExist(path) {
+		return nil, os.ErrNotExist
+	}
+
+	url, err := git.OriginURL(path)
 	if err != nil {
 		return nil, err
 	}
 
-	return proj, nil
-}
-
-func (p *Project) createDir() error {
-	for _, path := range []string{p.Proj, p.Src, p.Bin} {
-		if err := createDir(path); err != nil {
-			return err
-		}
+	in, err := parseInfoOfDir(path + "src/")
+	if err != nil {
+		return nil, err
 	}
-	return nil
+
+	return newProject(name, url, in.Pusher), nil
 }
 
-func (p *Project) cleanSrc() error {
-	return os.RemoveAll(p.Src)
-}
-
-// Build to run build commands
-func (p *Project) Build() error {
-	return p.exec(execBuild)
-}
-
-// Run to run run commands
-func (p *Project) Run() error {
-	return p.exec(execRun)
-}
-
-func (p *Project) exec(t execType) error {
-	operation, err := newOperation(p.Config)
+// All to get all projects)
+func All() []*Project {
+	files, err := ioutil.ReadDir(workspace)
 
 	if err != nil {
-		return err
+		return []*Project{}
 	}
 
-	var cmdStr string
+	projs := make([]*Project, 0)
 
-	switch t {
-	case execBuild:
-		cmdStr = strings.Join(operation.Build, " && ")
-	case execRun:
-		cmdStr = strings.Join(operation.Run, " && ")
-	default:
-		return errors.New("can not exec this function")
+	for _, file := range files {
+		if file.IsDir() {
+			proj, err := Of(file.Name())
+
+			if err != nil {
+				panic(err)
+			}
+
+			projs = append(projs, proj)
+		}
 	}
 
-	cmd := exec.Command("/bin/sh", "-c", cmdStr)
-	return cmd.Run()
+	return projs
+}
+
+func newProject(name, url string, pusher *model.Pusher) *Project {
+	root := workspace + name + "/"
+	path := NewPath(root, root+"src/", root+"bin/")
+
+	return &Project{
+		name,
+		url,
+		path,
+		pusher,
+	}
 }

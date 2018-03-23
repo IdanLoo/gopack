@@ -16,17 +16,29 @@ func push(ctx *gin.Context) {
 	body := &model.PushBody{}
 
 	if err := ctx.BindJSON(body); err != nil {
-		ctx.JSON(http.StatusOK, err)
+		ctx.JSON(http.StatusBadGateway, gin.H{
+			"error": err,
+		})
 		return
 	}
 
-	err := project.Clone(body.Repository.Name, body.Branch(), body.Repository.URL)
+	_, err := project.New(
+		body.Repository.Name,
+		body.Branch(),
+		body.Repository.URL,
+		body.Pusher,
+	)
+
 	if err != nil {
-		ctx.JSON(http.StatusOK, err)
+		ctx.JSON(http.StatusBadGateway, gin.H{
+			"error": err,
+		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, body)
+	ctx.JSON(http.StatusOK, gin.H{
+		"error": false,
+	})
 }
 
 func init() {
